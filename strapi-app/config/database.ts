@@ -12,7 +12,11 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
         database: env('DATABASE_NAME'),
         user: env('DATABASE_USERNAME'),
         password: env('DATABASE_PASSWORD'),
-        ssl: env.bool('DATABASE_SSL', false),
+        ssl: env.bool('DATABASE_SSL', false)
+          ? {
+              rejectUnauthorized: false,
+            }
+          : false,
         schema: env('DATABASE_SCHEMA', 'public'),
       },
       pool: {
