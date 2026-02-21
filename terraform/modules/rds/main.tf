@@ -1,10 +1,14 @@
 # ------------------------------
-# DB Subnet Group
+# Random suffix
 # ------------------------------
 
 resource "random_id" "suffix" {
   byte_length = 2
 }
+
+# ------------------------------
+# DB Subnet Group
+# ------------------------------
 
 resource "aws_db_subnet_group" "this" {
   name       = "${var.project_name}-db-subnet-group-${random_id.suffix.hex}"
@@ -15,17 +19,20 @@ resource "aws_db_subnet_group" "this" {
   }
 }
 
-
 # ------------------------------
 # RDS Postgres Instance
 # ------------------------------
 
 resource "aws_db_instance" "this" {
-  identifier        = "strapi-postgres"
-  engine            = "postgres"
-  engine_version    = "15"
-  instance_class    = "db.t3.micro"
-  allocated_storage = 20
+  identifier = "${var.project_name}-postgres-${random_id.suffix.hex}"
+
+  engine         = "postgres"
+  engine_version = "15"
+  instance_class = "db.t3.micro"
+
+  allocated_storage    = 20
+  storage_encrypted    = true
+  backup_retention_period = 1
 
   db_name  = var.db_name
   username = var.db_username
@@ -38,8 +45,9 @@ resource "aws_db_instance" "this" {
   multi_az            = false
 
   skip_final_snapshot = true
+  deletion_protection = false
 
   tags = {
-    Name = "strapi-postgres"
+    Name = "${var.project_name}-postgres"
   }
 }

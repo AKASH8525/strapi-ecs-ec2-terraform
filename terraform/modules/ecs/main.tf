@@ -11,7 +11,7 @@ resource "aws_ecs_cluster" "this" {
 # -----------------------------------
 
 resource "aws_cloudwatch_log_group" "strapi" {
-  name              = "/ecs/${var.project_name}-akash"
+  name              = "/ecs/${var.project_name}-strapi"
   retention_in_days = 7
 
   tags = {
@@ -67,9 +67,8 @@ resource "aws_ecs_task_definition" "this" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.strapi.name
-          awslogs-region        = "us-east-1"
+          awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
-          awslogs-create-group  = "true"
         }
       }
     }
@@ -81,11 +80,11 @@ resource "aws_ecs_task_definition" "this" {
 }
 
 # -----------------------------------
-# ECS Service (FARGATE)
+# ECS Service (FARGATE - PRIVATE)
 # -----------------------------------
 
 resource "aws_ecs_service" "this" {
-  name            = "${var.project_name}-service-v5"
+  name            = "${var.project_name}-service"
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.this.arn
   desired_count   = 1
@@ -94,7 +93,13 @@ resource "aws_ecs_service" "this" {
   network_configuration {
     subnets          = var.subnet_ids
     security_groups  = [var.ecs_sg_id]
-    assign_public_ip = true
+    assign_public_ip = false   # IMPORTANT: private subnet
+  }
+
+  load_balancer {
+    target_group_arn = var.target_group_arn
+    container_name   = "strapi"
+    container_port   = 1337
   }
 
   propagate_tags = "SERVICE"
@@ -104,44 +109,50 @@ resource "aws_ecs_service" "this" {
   ]
 }
 
+# -----------------------------------
+# CloudWatch Dashboard
+# -----------------------------------
+
 resource "aws_cloudwatch_dashboard" "ecs_dashboard" {
   dashboard_name = "${var.project_name}-ecs-dashboard"
 
   dashboard_body = jsonencode({
     widgets = [
       {
-        type = "metric"
-        x = 0
-        y = 0
-        width = 12
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
         height = 6
+
         properties = {
           metrics = [
-            ["AWS/ECS", "CPUUtilization", "ClusterName", "${var.project_name}-cluster", "ServiceName", "${var.project_name}-service-v5"],
-            ["AWS/ECS", "MemoryUtilization", "ClusterName", "${var.project_name}-cluster", "ServiceName", "${var.project_name}-service-v5"]
+            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.this.name],
+            ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.this.name]
           ]
           period = 300
           stat   = "Average"
-          region = "us-east-1"
+          region = var.aws_region
           title  = "CPU and Memory Utilization"
         }
       },
       {
-        type = "metric"
-        x = 0
-        y = 7
-        width = 12
+        type   = "metric"
+        x      = 0
+        y      = 7
+        width  = 12
         height = 6
+
         properties = {
           metrics = [
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", "${var.project_name}-cluster", "ServiceName", "${var.project_name}-service-v5"],
-            ["AWS/ECS", "NetworkRxBytes", "ClusterName", "${var.project_name}-cluster", "ServiceName", "${var.project_name}-service-v5"],
-            ["AWS/ECS", "NetworkTxBytes", "ClusterName", "${var.project_name}-cluster", "ServiceName", "${var.project_name}-service-v5"]
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.this.name],
+            ["AWS/ECS", "NetworkRxBytes", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.this.name],
+            ["AWS/ECS", "NetworkTxBytes", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", aws_ecs_service.this.name]
           ]
           period = 300
           stat   = "Average"
-          region = "us-east-1"
-          title  = "Task Count and Network Metrics"
+          region = var.aws_region
+          title  = "Task Count and Network Traffic"
         }
       }
     ]

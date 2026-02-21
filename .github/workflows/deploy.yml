@@ -6,11 +6,11 @@ on:
       - main
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: akash-strapi-ecs
-  ACCOUNT_ID: 811738710312
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: strapi-repo
+  ACCOUNT_ID: 229401742204
   CLUSTER_NAME: strapi-cluster
-  SERVICE_NAME: strapi-service-v5   # Keep -v5 (must match Terraform)
+  SERVICE_NAME: strapi-service
 
 jobs:
   deploy:
@@ -69,6 +69,8 @@ jobs:
         working-directory: terraform
         run: |
           terraform apply -auto-approve \
+            -var="project_name=strapi" \
+            -var="aws_region=$AWS_REGION" \
             -var="image_uri=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:${{ github.sha }}" \
             -var="db_name=${{ secrets.DB_NAME }}" \
             -var="db_username=${{ secrets.DB_USERNAME }}" \
@@ -81,26 +83,14 @@ jobs:
             --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME
 
-      # Fetch Public Endpoint
-      - name: Get Strapi Public URL
+      # Get ALB DNS
+      - name: Get ALB DNS
         run: |
-          TASK_ARN=$(aws ecs list-tasks \
-            --cluster $CLUSTER_NAME \
-            --query 'taskArns[0]' \
-            --output text)
-
-          ENI_ID=$(aws ecs describe-tasks \
-            --cluster $CLUSTER_NAME \
-            --tasks $TASK_ARN \
-            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
-            --output text)
-
-          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
-            --network-interface-ids $ENI_ID \
-            --query 'NetworkInterfaces[0].Association.PublicIp' \
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --query "LoadBalancers[0].DNSName" \
             --output text)
 
           echo "-------------------------------------------"
-          echo "Strapi URL:"
-          echo "http://$PUBLIC_IP:1337"
+          echo "Strapi Public URL:"
+          echo "http://$ALB_DNS"
           echo "-------------------------------------------"
